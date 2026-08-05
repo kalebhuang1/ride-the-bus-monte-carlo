@@ -1,10 +1,12 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.ticker import PercentFormatter
+from utils import red_or_black, higher_or_lower, inside_or_outside, suit
 
 np.random.seed(42)  # reproducibility
 
-N_TRIALS = 5000
+N_TRIALS = 50000
 VERBOSE = False 
 
 suits = ['♠', '♥', '♦', '♣']
@@ -16,38 +18,7 @@ print(deck)
 
 drinks_obs = []
 
-def red_or_black(card):
-    if card.find('♥') != -1 or card.find('♦') != -1:
-        return 'red'
-    else:
-        return 'black'
-    
-def higher_or_lower(card1, card2):
-    value1 = card1[:-1]
-    value2 = card2[:-1]
-    rank_order = {rank: i for i, rank in enumerate(ranks)}
-    if rank_order[value1] < rank_order[value2]:
-        return 'lower'
-    elif rank_order[value1] > rank_order[value2]:
-        return 'higher'
-    else:
-        return 'equal'
-def inside_or_outside(card1, card2, card3):
-    value1 = card1[:-1]
-    value2 = card2[:-1]
-    value3 = card3[:-1]
-    rank_order = {rank: i for i, rank in enumerate(ranks)}
-    min_value = min(rank_order[value1], rank_order[value2])
-    max_value = max(rank_order[value1], rank_order[value2])
-    if rank_order[value3] > min_value and rank_order[value3] < max_value:
-        return 'inside'
-    elif rank_order[value3] < min_value or rank_order[value3] > max_value:
-        return 'outside'
-    else:
-        return 'equal'
-def suit(card):
-    return card[-1]
- 
+
 for i in range(N_TRIALS):
     finished = False
     shuffled_deck = list(np.random.permutation(deck))
@@ -115,7 +86,7 @@ final_se = se[-1]                 # uncertainty of the estimate
 print(f"Standard deviation: {final_sd:.3f}")
 print(f"Standard error:     {final_se:.3f}")
 
-fig, ax = plt.subplots(figsize=(9, 5))
+fig, (ax, ax_cdf) = plt.subplots(1, 2, figsize=(14, 5))
 
 ax.fill_between(n, cum_mean - 1.96 * se, cum_mean + 1.96 * se,
                 color='#2a78d6', alpha=0.15, linewidth=0,
@@ -130,7 +101,7 @@ ax.plot([], [], ' ', label=f'Standard error  $s/\\sqrt{{n}}$ = {final_se:.3f}')
 
 ax.set_xlabel('Simulated rounds')
 ax.set_ylabel('Mean drinks per round')
-ax.set_title('Convergence of Monte Carlo estimate of drinks per round (Random Guessing)', fontsize=14, fontweight='bold')
+ax.set_title('Convergence of the Monte Carlo estimate', fontsize=13, fontweight='bold')
 
 ax.set_xlim(1, drinks.size)
 tail = cum_mean[min(50, drinks.size - 1):]
@@ -146,6 +117,39 @@ for side in ('left', 'bottom'):
 ax.tick_params(colors='#898781')
 ax.legend(frameon=False, loc='upper right')
 
+# --- Cumulative distribution: share of rounds costing at most x drinks ---
+x_max = np.ceil(np.percentile(drinks, 99) / 10) * 10
+ordered = np.sort(drinks)
+share = np.arange(1, drinks.size + 1) / drinks.size
+
+ax_cdf.step(ordered, share, where='post', color='#2a78d6', linewidth=2)
+
+# Read the median and 90th percentile straight off the curve
+for quantile, name in ((0.5, 'median'), (0.9, '90th pct')):
+    value = np.percentile(drinks, quantile * 100)
+    ax_cdf.plot([0, value], [quantile, quantile], color='#c3c2b7', linewidth=1)
+    ax_cdf.plot([value, value], [0, quantile], color='#c3c2b7', linewidth=1)
+    ax_cdf.annotate(f'{name}: {value:.0f} drinks', xy=(value, quantile),
+                    xytext=(8, -14), textcoords='offset points',
+                    fontsize=10, color='#52514e')
+
+ax_cdf.set_xlim(0, x_max)
+ax_cdf.set_ylim(0, 1)
+ax_cdf.yaxis.set_major_formatter(PercentFormatter(xmax=1))
+ax_cdf.set_xlabel('Drinks in a round')
+ax_cdf.set_ylabel('Share of rounds costing this much or less')
+ax_cdf.set_title('Cumulative distribution', fontsize=13, fontweight='bold')
+
+ax_cdf.grid(axis='y', color='#e1e0d9', linewidth=0.8)
+ax_cdf.set_axisbelow(True)
+for side in ('top', 'right'):
+    ax_cdf.spines[side].set_visible(False)
+for side in ('left', 'bottom'):
+    ax_cdf.spines[side].set_color('#c3c2b7')
+ax_cdf.tick_params(colors='#898781')
+
+fig.suptitle(f'Ride the Bus — random guessing ({drinks.size:,} simulated rounds)',
+             fontsize=15, fontweight='bold')
 fig.tight_layout()
 fig.savefig('convergence_random_guessing.png', dpi=150)
 plt.show()

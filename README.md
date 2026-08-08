@@ -6,13 +6,13 @@ Accompanies a Substack article: [link]
 
 ## The game
 
-A player must answer four questions correctly in a row: Red or Black, Higher or Lower, Inside or Outside, and Suit. Any wrong guess is one drink and a restart to the first question. Cards are discarded as they are drawn, so the deck thins out over time. The goal is to drink as little as possible.
+A player must answer four questions correctly in a row: Red or Black, Higher or Lower, Inside or Outside, and Suit. Any wrong guess is one drink and a restart to the first question. Ties lose: matching the previous rank on Higher or Lower, or landing exactly on a boundary card on Inside or Outside, costs a drink like any other miss. Cards are discarded as they are drawn, so the deck thins out over time. The goal is to drink as little as possible.
 
 ## The strategies
 
-- **Random:** guesses that ignore the deck entirely.
+- **Random:** coin-flip guesses that ignore both the deck and the cards face-up on the table.
 - **Optimal:** perfect card counting, always playing the most likely option.
-- **Last-5 human:** a realistic player who remembers only the last five cards.
+- **Last-7 human:** a realistic player who plays the face-up cards correctly but remembers only the last seven discards.
 
 ## Key finding
 

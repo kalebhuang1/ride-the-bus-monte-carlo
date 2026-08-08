@@ -2,9 +2,11 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.ticker import PercentFormatter
-from utils import red_or_black, higher_or_lower, inside_or_outside, suit, optimal_guess
+from utils import (red_or_black, higher_or_lower, inside_or_outside, suit,
+                   optimal_guess, reshuffle, new_counts, transition_table,
+                   transition_table_png)
 
-np.random.seed(42)  # reproducibility
+np.random.seed(42)
 
 N_TRIALS = 50000
 
@@ -14,62 +16,80 @@ ranks = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K']
 deck = [f"{rank}{suit}" for suit in suits for rank in ranks]
 
 drinks_obs = []
+tries, wins = new_counts()
 
+# game logic
 for i in range(N_TRIALS):
     finished = False
     shuffled_deck = list(np.random.permutation(deck))
     drinks_round = 0
     while not finished:
         if len(shuffled_deck) == 0:
-            shuffled_deck = list(np.random.permutation(deck))
+            shuffled_deck = reshuffle(deck)
+        tries['red_or_black'] += 1
         guess_red_black = optimal_guess(shuffled_deck, 'red_or_black')
         card = shuffled_deck.pop()
         red_or_black_guess = red_or_black(card)
         if guess_red_black != red_or_black_guess:
             drinks_round += 1
             continue
+        wins['red_or_black'] += 1
         if len(shuffled_deck) == 0:
-            shuffled_deck = list(np.random.permutation(deck))
+            shuffled_deck = reshuffle(deck, [card])
+        tries['higher_or_lower'] += 1
         guess_higher_lower = optimal_guess(shuffled_deck, 'higher_or_lower', card, None)
         card2 = shuffled_deck.pop()
         higher_or_lower_guess = higher_or_lower(card, card2)
         if guess_higher_lower != higher_or_lower_guess:
             drinks_round += 1
             continue
+        wins['higher_or_lower'] += 1
         if len(shuffled_deck) == 0:
-            shuffled_deck = list(np.random.permutation(deck))
+            shuffled_deck = reshuffle(deck, [card, card2])
+        tries['inside_or_outside'] += 1
         guess_inside_outside = optimal_guess(shuffled_deck, 'inside_or_outside', card, card2)
         card3 = shuffled_deck.pop()
         inside_or_outside_guess = inside_or_outside(card, card2, card3)
         if guess_inside_outside != inside_or_outside_guess:
             drinks_round += 1
             continue
+        wins['inside_or_outside'] += 1
         if len(shuffled_deck) == 0:
-            shuffled_deck = list(np.random.permutation(deck))
+            shuffled_deck = reshuffle(deck, [card, card2, card3])
+        tries['suit'] += 1
         guess_suit = optimal_guess(shuffled_deck, 'suit')
         card4 = shuffled_deck.pop()
         suit_guess = suit(card4)
         if guess_suit != suit_guess:
             drinks_round += 1
             continue
+        wins['suit'] += 1
         finished = True
         drinks_obs.append(drinks_round)
+# table
 print(f"Average drinks per round: {np.mean(drinks_obs)}")
+print()
+print(transition_table(
+    f"Optimal (perfect counting) — transition probabilities ({len(drinks_obs):,} rounds)",
+    tries, wins, np.mean(drinks_obs)))
+print()
 
-# --- Monte Carlo convergence: running mean of drinks per round ---
+transition_table_png('transitions_optimal_play.png', 'Optimal play — perfect counting',
+                     tries, wins, np.mean(drinks_obs), len(drinks_obs))
+
+# mc plot
 drinks = np.asarray(drinks_obs, dtype=float)
 n = np.arange(1, drinks.size + 1)
 
 cum_mean = np.cumsum(drinks) / n
 
-# Running sample variance -> standard error of the running mean (s_n / sqrt(n)).
 cum_sq = np.cumsum(drinks ** 2) / n
 cum_var = np.maximum(cum_sq - cum_mean ** 2, 0.0) * n / np.maximum(n - 1, 1)
 se = np.sqrt(cum_var / n)
 
 final = cum_mean[-1]
-final_sd = np.sqrt(cum_var[-1])   # spread of a single round
-final_se = se[-1]                 # uncertainty of the estimate
+final_sd = np.sqrt(cum_var[-1])
+final_se = se[-1]
 
 print(f"Standard deviation: {final_sd:.3f}")
 print(f"Standard error:     {final_se:.3f}")
@@ -83,7 +103,6 @@ ax.axhline(final, color='#898781', linewidth=1.5, linestyle='--',
            label=f'Final estimate = {final:.3f}')
 ax.plot(n, cum_mean, color='#2a78d6', linewidth=2, label='Running mean')
 
-# Text-only legend entries for the summary statistics.
 ax.plot([], [], ' ', label=f'Standard deviation  $s$ = {final_sd:.2f}')
 ax.plot([], [], ' ', label=f'Standard error  $s/\\sqrt{{n}}$ = {final_se:.3f}')
 
@@ -105,14 +124,13 @@ for side in ('left', 'bottom'):
 ax.tick_params(colors='#898781')
 ax.legend(frameon=False, loc='upper right')
 
-# --- Cumulative distribution: share of rounds costing at most x drinks ---
+# cdf plot
 x_max = np.ceil(np.percentile(drinks, 99) / 10) * 10
 ordered = np.sort(drinks)
 share = np.arange(1, drinks.size + 1) / drinks.size
 
 ax_cdf.step(ordered, share, where='post', color='#2a78d6', linewidth=2)
 
-# Read the median and 90th percentile straight off the curve
 for quantile, name in ((0.5, 'median'), (0.9, '90th pct')):
     value = np.percentile(drinks, quantile * 100)
     ax_cdf.plot([0, value], [quantile, quantile], color='#c3c2b7', linewidth=1)
